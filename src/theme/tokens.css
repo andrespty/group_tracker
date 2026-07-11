@@ -1,0 +1,20 @@
+:root{
+  --cream:#F7EFE3; --paper:#FFFFFF; --card:#FFFFFF;
+  --ink:#241C15; --muted:#8B837A; --line:rgba(36,28,21,.10);
+  --accent:#F5674A;
+  --f1:#F5674A; --f2:#F3A23C; --f3:#4FA6A0; --f4:#8FB56B; --f5:#A99BD1; --f6:#EC6A8B;
+  --track:#EBDFCF;
+  --shadow:0 10px 30px rgba(36,28,21,.10);
+  --shadow-sm:0 4px 14px rgba(36,28,21,.07);
+  --display:'Bricolage Grotesque',sans-serif;
+  --body:'Hanken Grotesk',sans-serif;
+  --mono:'DM Mono',ui-monospace,monospace;
+  --r-card:22px; --r-pill:999px;
+  --ease:cubic-bezier(.22,1,.36,1);
+}
+[data-theme="dark"]{
+  --cream:#17120D; --paper:#211A13; --card:#241C15;
+  --ink:#F6EEE3; --muted:#A99B8B; --line:rgba(255,255,255,.09);
+  --track:#332920;
+  --shadow:0 12px 34px rgba(0,0,0,.45); --shadow-sm:0 4px 16px rgba(0,0,0,.35);
+}
