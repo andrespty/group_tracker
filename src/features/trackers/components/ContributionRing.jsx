@@ -4,7 +4,7 @@ import { colorFor } from '../../../lib/colors.js'
 const R = 120
 const C = 2 * Math.PI * R
 
-export function ContributionRing({ total, displayTotal, goal, unit, leaderboard }) {
+export function ContributionRing({ total, displayTotal, goal, unit, leaderboard, pastTotal = 0 }) {
   let offset = 0
   const arcs = leaderboard.map((m) => {
     const len = (Number(m.total) / Number(goal)) * C
@@ -12,6 +12,11 @@ export function ContributionRing({ total, displayTotal, goal, unit, leaderboard 
     offset += len
     return seg
   })
+  if (Number(pastTotal) > 0) {
+    const len = (Number(pastTotal) / Number(goal)) * C
+    arcs.push({ len, offset, color: 'var(--muted)', muted: true })
+    offset += len
+  }
   const pct = (total / goal) * 100
 
   return (
@@ -20,7 +25,7 @@ export function ContributionRing({ total, displayTotal, goal, unit, leaderboard 
         <circle cx="143" cy="143" r={R} stroke="var(--track)" strokeWidth="20" fill="none" />
         {arcs.map((a, i) => (
           <circle key={i} cx="143" cy="143" r={R} fill="none" strokeWidth="20"
-            strokeLinecap="round" stroke={a.color}
+            strokeLinecap="round" stroke={a.color} opacity={a.muted ? 0.4 : 1}
             strokeDasharray={`${a.len} ${C - a.len}`} strokeDashoffset={-a.offset} />
         ))}
       </svg>

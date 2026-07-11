@@ -8,4 +8,9 @@ export const tokens = {
     m[viewToken] = writeToken
     localStorage.setItem(LS, JSON.stringify(m))
   },
+  clear: (viewToken) => {
+    const m = tokens.all()
+    delete m[viewToken]
+    localStorage.setItem(LS, JSON.stringify(m))
+  },
 }
