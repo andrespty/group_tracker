@@ -1,0 +1,16 @@
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  font-family:var(--body); color:var(--ink); text-wrap:pretty;
+  min-height:100vh;
+  background:
+    radial-gradient(1000px 560px at 85% -10%, #ffd9b355, transparent 60%),
+    radial-gradient(760px 460px at -12% 112%, #f5674a1f, transparent 55%),
+    #efe4d4;
+}
+[data-theme="dark"] body{background:
+  radial-gradient(900px 520px at 85% -12%, #f5674a2b, transparent 60%),
+  radial-gradient(720px 440px at -12% 112%, #4fa6a01f, transparent 55%),
+  #0f0b07;}
+
+.wrap{max-width:460px; margin:0 auto; padding:26px 18px 90px;}
