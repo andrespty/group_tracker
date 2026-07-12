@@ -1,55 +1,9 @@
 -- ============================================================================
---  GROUP TRACKER — Supabase schema
---  Paste this whole file into the Supabase SQL Editor and run it once.
---  Idempotent: safe to re-run in full any time you pull schema changes.
---
---  Security model:
---   * The anon key is PUBLIC, so direct table access is locked down by RLS.
---   * Everything happens through SECURITY DEFINER functions that validate
---     tokens server-side. Public read needs a group's view_token; writing an
---     entry needs a member's write_token.
+--  Tabs + Settings: creator ownership, departed members, unique names,
+--  and the new group/member management RPCs.
 -- ============================================================================
 
--- Needed for gen_random_bytes() token generation.
-create extension if not exists pgcrypto;
-
--- ---------------------------------------------------------------------------
--- Tables
--- ---------------------------------------------------------------------------
-create table if not exists groups (
-  id          uuid primary key default gen_random_uuid(),
-  name        text not null,
-  unit        text not null default 'entries',   -- e.g. 'drinks', 'km', 'dollars'
-  increment   numeric not null default 1,        -- default amount per tap
-  goal        numeric,                            -- e.g. 10000 (nullable = no goal)
-  view_token  text not null unique,               -- in the shareable read link
-  created_at  timestamptz not null default now()
-);
-
-create table if not exists members (
-  id          uuid primary key default gen_random_uuid(),
-  group_id    uuid not null references groups(id) on delete cascade,
-  name        text not null,
-  write_token text not null unique,               -- in each person's log link/Shortcut
-  account_id  uuid references auth.users(id),     -- null = guest
-  created_at  timestamptz not null default now()
-);
-
-create table if not exists entries (
-  id          uuid primary key default gen_random_uuid(),
-  group_id    uuid not null references groups(id) on delete cascade,
-  member_id   uuid not null references members(id) on delete cascade,
-  amount      numeric not null default 1,
-  created_at  timestamptz not null default now()
-);
-
-create index if not exists entries_group_idx  on entries(group_id);
-create index if not exists entries_member_idx on entries(member_id);
-create index if not exists members_account_idx on members(account_id);
-
--- groups.created_by: who owns/administers this tracker (can edit/delete it,
--- and must hand off ownership before leaving). Nullable so it can be added
--- to an existing table; backfilled below for pre-existing groups.
+-- --- schema changes ---------------------------------------------------------
 alter table groups add column if not exists created_by uuid references members(id);
 
 update groups g
@@ -61,39 +15,13 @@ set created_by = (
 )
 where g.created_by is null;
 
--- members.left_at: a departed member's row (and their entries) is kept
--- forever so the group total stays intact — we mark them left instead of
--- deleting. null = active member.
 alter table members add column if not exists left_at timestamptz;
 
--- One active name per group. Partial (where left_at is null) so a departed
--- member's name is freed up for reuse by someone new.
 create unique index if not exists members_unique_name_per_group
   on members (group_id, lower(trim(name)))
   where left_at is null;
 
--- ---------------------------------------------------------------------------
--- Lock everything down. RLS on + no policies = no direct anon/auth access.
--- All access flows through the SECURITY DEFINER functions below.
--- ---------------------------------------------------------------------------
-alter table groups  enable row level security;
-alter table members enable row level security;
-alter table entries enable row level security;
-
-revoke all on groups, members, entries from anon, authenticated;
-
--- Helper: short url-safe token.
--- search_path includes `extensions` because newer Supabase projects install
--- pgcrypto there instead of `public`.
-create or replace function _new_token()
-returns text language sql volatile set search_path = extensions, public as $$
-  select encode(gen_random_bytes(12), 'hex');
-$$;
-
--- ---------------------------------------------------------------------------
--- create_group: makes a tracker + its first member (the creator).
--- If called while signed in, the creator member is linked to that account.
--- ---------------------------------------------------------------------------
+-- --- changed functions ------------------------------------------------------
 create or replace function create_group(
   p_name text,
   p_creator_name text,
@@ -130,9 +58,6 @@ begin
 end;
 $$;
 
--- ---------------------------------------------------------------------------
--- add_member: anyone holding the group's view link can add themselves.
--- ---------------------------------------------------------------------------
 create or replace function add_member(p_view_token text, p_name text)
 returns json
 language plpgsql security definer set search_path = public as $$
@@ -155,10 +80,6 @@ begin
 end;
 $$;
 
--- ---------------------------------------------------------------------------
--- log_entry: the core write. Needs only a member's write_token.
--- amount defaults to the group's configured increment.
--- ---------------------------------------------------------------------------
 create or replace function log_entry(p_write_token text, p_amount numeric default null)
 returns json
 language plpgsql security definer set search_path = public as $$
@@ -188,12 +109,7 @@ begin
 end;
 $$;
 
--- ---------------------------------------------------------------------------
--- get_standings: public read via the group's view_token. Optionally takes a
--- write_token too, purely to compute is_creator for that caller.
--- Returns group info + active-member leaderboard + past-member total +
--- grand total + recent activity (includes departed members' past entries).
--- ---------------------------------------------------------------------------
+-- signature changed (added p_write_token), so the old one must be dropped
 drop function if exists get_standings(text);
 
 create or replace function get_standings(p_view_token text, p_write_token text default null)
@@ -250,55 +166,7 @@ begin
 end;
 $$;
 
--- ---------------------------------------------------------------------------
--- claim_member: a signed-in user attaches an existing guest member row to
--- their account (so their history follows them). Needs the write_token.
--- ---------------------------------------------------------------------------
-create or replace function claim_member(p_write_token text)
-returns json
-language plpgsql security definer set search_path = public as $$
-declare
-  m members%rowtype;
-begin
-  if auth.uid() is null then raise exception 'must be signed in'; end if;
-
-  select * into m from members where write_token = p_write_token;
-  if not found then raise exception 'invalid write token'; end if;
-  if m.account_id is not null and m.account_id <> auth.uid() then
-    raise exception 'already claimed by another account';
-  end if;
-
-  update members set account_id = auth.uid() where id = m.id;
-  return json_build_object('member_id', m.id, 'group_id', m.group_id);
-end;
-$$;
-
--- ---------------------------------------------------------------------------
--- get_my_trackers: dashboard for a signed-in user.
--- ---------------------------------------------------------------------------
-create or replace function get_my_trackers()
-returns json
-language plpgsql security definer set search_path = public as $$
-begin
-  if auth.uid() is null then raise exception 'must be signed in'; end if;
-
-  return (
-    select coalesce(json_agg(row_to_json(t) order by t.created_at desc), '[]'::json)
-    from (
-      select g.name, g.unit, g.goal, g.view_token,
-             me.name as my_name, me.write_token, g.created_at,
-             (select coalesce(sum(amount),0) from entries where group_id = g.id) as total
-      from members me
-      join groups g on g.id = me.group_id
-      where me.account_id = auth.uid()
-    ) t
-  );
-end;
-$$;
-
--- ---------------------------------------------------------------------------
--- rename_member: change your own display name within the group.
--- ---------------------------------------------------------------------------
+-- --- new functions ----------------------------------------------------------
 create or replace function rename_member(p_write_token text, p_new_name text)
 returns json
 language plpgsql security definer set search_path = extensions, public as $$
@@ -321,9 +189,6 @@ begin
 end;
 $$;
 
--- ---------------------------------------------------------------------------
--- update_group: edit tracker settings. Creator only.
--- ---------------------------------------------------------------------------
 create or replace function update_group(
   p_write_token text,
   p_name text,
@@ -353,11 +218,6 @@ begin
 end;
 $$;
 
--- ---------------------------------------------------------------------------
--- leave_group: mark the caller as departed. Entries are never deleted, so
--- the group total is unaffected. The creator must hand off ownership to an
--- active successor before they're allowed to leave.
--- ---------------------------------------------------------------------------
 create or replace function leave_group(p_write_token text, p_successor_member_id uuid default null)
 returns json
 language plpgsql security definer set search_path = extensions, public as $$
@@ -395,9 +255,6 @@ begin
 end;
 $$;
 
--- ---------------------------------------------------------------------------
--- delete_group: hard delete. Creator only. Cascades to members and entries.
--- ---------------------------------------------------------------------------
 create or replace function delete_group(p_write_token text)
 returns json
 language plpgsql security definer set search_path = extensions, public as $$
@@ -419,9 +276,7 @@ begin
 end;
 $$;
 
--- ---------------------------------------------------------------------------
--- Expose only the functions to the API roles.
--- ---------------------------------------------------------------------------
+-- --- grants -----------------------------------------------------------------
 grant execute on function
   create_group(text,text,text,numeric,numeric),
   add_member(text,text),
