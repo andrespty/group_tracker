@@ -15,9 +15,9 @@ export function JoinBox({ onJoin }) {
   return (
     <Card title="Join this tracker">
       <Field label="Your name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Sam" />
+      {err && <p className="err">{err}</p>}
       <div className="spacer" />
       <Button full onClick={submit} disabled={!name}>Join &amp; start logging</Button>
-      {err && <p className="err">{err}</p>}
     </Card>
   )
 }

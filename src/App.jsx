@@ -26,7 +26,7 @@ export default function App() {
       </header>
 
       {vt ? (
-        <TrackerPage vt={vt} session={session} />
+        <TrackerPage vt={vt} session={session} go={go} />
       ) : (
         <>
           <CreateTracker go={go} />

@@ -30,9 +30,12 @@ export function useTracker(vt) {
     raf.current = requestAnimationFrame(tick)
   }, [])
 
+  // Depending on writeToken (rather than a ref) means join/leave — which
+  // change it — automatically trigger a fresh load with an up-to-date
+  // is_creator / my_member_id, no manual reload needed on their part.
   const load = useCallback(async (animate = false) => {
     try {
-      const d = await api.getStandings(vt)
+      const d = await api.getStandings(vt, writeToken)
       setData(d)
       if (animate) {
         animateTo(Number(d.total))
@@ -43,7 +46,7 @@ export function useTracker(vt) {
     } catch (e) {
       setErr(e.message)
     }
-  }, [vt, animateTo])
+  }, [vt, writeToken, animateTo])
 
   useEffect(() => {
     load(false)
@@ -65,8 +68,36 @@ export function useTracker(vt) {
     const r = await api.addMember(vt, name)
     tokens.set(vt, r.write_token)
     setWriteToken(r.write_token)
-    await load(false)
-  }, [vt, load])
+  }, [vt])
 
-  return { data, err, writeToken, displayTotal, log, join, reload: load }
+  const rename = useCallback(async (name) => {
+    if (!writeToken) return
+    await api.renameMember(writeToken, name)
+    await load(false)
+  }, [writeToken, load])
+
+  const updateSettings = useCallback(async (patch) => {
+    if (!writeToken) return
+    await api.updateGroup(writeToken, patch)
+    await load(false)
+  }, [writeToken, load])
+
+  const leave = useCallback(async (successorMemberId) => {
+    if (!writeToken) return
+    await api.leaveGroup(writeToken, successorMemberId ?? null)
+    tokens.clear(vt)
+    setWriteToken(null)
+  }, [writeToken, vt])
+
+  const remove = useCallback(async () => {
+    if (!writeToken) return
+    await api.deleteGroup(writeToken)
+    tokens.clear(vt)
+  }, [writeToken, vt])
+
+  return {
+    data, err, writeToken, displayTotal,
+    log, join, rename, updateSettings, leave, remove,
+    reload: load,
+  }
 }

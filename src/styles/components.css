@@ -135,3 +135,31 @@ input:focus,select:focus{outline:none; border-color:var(--accent)}
 .trow .tval{font-family:var(--mono); font-size:14px; font-variant-numeric:tabular-nums}
 
 .confetti{position:fixed;width:9px;height:14px;border-radius:2px;pointer-events:none;z-index:60;will-change:transform,opacity}
+
+/* tabs */
+.tabbar{display:flex; gap:3px; background:var(--track); border-radius:var(--r-pill);
+  padding:4px; margin:18px 0 16px}
+.tab{flex:1; text-align:center; background:none; border:none; cursor:pointer;
+  font-family:var(--display); font-weight:700; font-size:11px; letter-spacing:.01em;
+  line-height:1.2; color:var(--muted); padding:9px 4px; border-radius:var(--r-pill);
+  transition:.15s}
+.tab.active{background:var(--card); color:var(--ink); box-shadow:var(--shadow-sm)}
+
+/* past members (leaderboard + ring) */
+.row.past{opacity:.65}
+.past-av{background:var(--track); color:var(--muted)}
+
+/* danger button */
+.btn.danger{background:#D6452B}
+
+/* copy-to-clipboard row */
+.copyrow{display:flex; align-items:center; gap:8px; margin-top:6px}
+.copyrow .share{flex:1; margin-top:0}
+.copyrow .iconbtn{flex:0 0 auto}
+
+/* numbered setup steps (iOS Shortcut guide) */
+.steps{margin:12px 0 0; padding-left:20px; display:flex; flex-direction:column; gap:12px;
+  font-size:14px; line-height:1.5}
+.steps code{font-family:var(--mono); font-size:12.5px; background:var(--paper);
+  border:1px solid var(--line); border-radius:6px; padding:1px 6px}
+[data-theme="dark"] .steps code{background:#1b1610}
