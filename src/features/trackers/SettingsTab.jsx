@@ -1,15 +1,23 @@
 import { useState } from 'react'
+import { KINDS, kindMeta } from '../../lib/format.js'
 import { Card } from '../../components/Card.jsx'
 import { Button } from '../../components/Button.jsx'
 import { Field } from '../../components/Field.jsx'
 
 function GroupSection({ group, onSaveGroup }) {
   const [f, setF] = useState({
-    name: group.name, unit: group.unit, increment: group.increment, goal: group.goal ?? '',
+    name: group.name, kind: group.kind, unit: group.unit,
+    increment: group.increment, goal: group.goal ?? '',
   })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
+  const meta = kindMeta(f.kind)
+
+  const selectKind = (kind) => {
+    const m = kindMeta(kind)
+    setF({ ...f, kind, unit: kind === f.kind ? f.unit : (kind === 'count' ? f.unit : m.defaultUnit) })
+  }
 
   const submit = async () => {
     setErr(''); setBusy(true)
@@ -19,6 +27,7 @@ function GroupSection({ group, onSaveGroup }) {
         unit: f.unit,
         increment: Number(f.increment),
         goal: f.goal === '' ? null : Number(f.goal),
+        kind: f.kind,
       })
     } catch (e) {
       setErr(e.message)
@@ -29,12 +38,37 @@ function GroupSection({ group, onSaveGroup }) {
 
   return (
     <Card title="Group">
+      <label>Tracker type</label>
+      <div className="kindgrid">
+        {KINDS.map((k) => (
+          <button type="button" key={k.id}
+                  className={`kindopt ${f.kind === k.id ? 'active' : ''}`}
+                  onClick={() => selectKind(k.id)}>
+            <div className="klabel">{k.label}</div>
+            <div className="khint">{k.hint}</div>
+          </button>
+        ))}
+      </div>
+
       <Field label="Tracker name" value={f.name} onChange={set('name')} />
       <div className="grid2">
-        <div><Field label="Unit" value={f.unit} onChange={set('unit')} /></div>
-        <div><Field label="Per tap" type="number" value={f.increment} onChange={set('increment')} /></div>
+        <div>
+          <label>Unit</label>
+          {meta.unitMode === 'select' ? (
+            <select value={f.unit} onChange={set('unit')}>
+              {meta.unitOptions.map((u) => <option key={u} value={u}>{u}</option>)}
+            </select>
+          ) : (
+            <input value={f.unit} onChange={set('unit')} />
+          )}
+        </div>
+        <div>
+          <Field label="Per tap" type="number" step={meta.whole ? '1' : 'any'}
+                 value={f.increment} onChange={set('increment')} />
+        </div>
       </div>
-      <Field label="Goal (blank = no goal)" type="number" value={f.goal} onChange={set('goal')} />
+      <Field label="Goal (blank = no goal)" type="number" step={meta.whole ? '1' : 'any'}
+             value={f.goal} onChange={set('goal')} />
       <div className="spacer" />
       <Button full disabled={busy || !f.name} onClick={submit}>
         {busy ? 'Saving…' : 'Save changes'}
