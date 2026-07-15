@@ -8,21 +8,15 @@ import { LogDialog } from './components/LogDialog.jsx'
 import { JoinBox } from './JoinBox.jsx'
 import { LogFromPhone } from './LogFromPhone.jsx'
 import { SettingsTab } from './SettingsTab.jsx'
+import { PendingTab } from './PendingTab.jsx'
 import { formatAmount } from '../../lib/format.js'
 import { Card } from '../../components/Card.jsx'
 import { Tabs } from '../../components/Tabs.jsx'
 
-const TABS = [
-  { id: 'leaderboard', label: 'Leaderboard' },
-  { id: 'activity', label: 'Activity' },
-  { id: 'phone', label: 'Log from phone' },
-  { id: 'settings', label: 'Settings' },
-]
-
 export function TrackerPage({ vt, session, go }) {
   const {
     data, err, writeToken, displayTotal,
-    log, removeEntry, join, rename, updateSettings, leave, remove,
+    log, removeEntry, vote, join, rename, updateSettings, leave, remove,
   } = useTracker(vt)
   const [dialogOpen, setDialogOpen] = useState(false)
 
@@ -32,6 +26,15 @@ export function TrackerPage({ vt, session, go }) {
   const g = data.group
   const hasGoal = g.goal != null && Number(g.goal) > 0
   const pastTotal = Number(data.past_total || 0)
+  const pendingCount = Number(data.pending_count || 0)
+
+  const tabs = [
+    { id: 'leaderboard', label: 'Leaderboard' },
+    { id: 'activity', label: 'Activity' },
+    { id: 'pending', label: 'Pending', badge: pendingCount },
+    { id: 'phone', label: 'Log from phone' },
+    { id: 'settings', label: 'Settings' },
+  ]
 
   return (
     <>
@@ -71,7 +74,7 @@ export function TrackerPage({ vt, session, go }) {
         />
       )}
 
-      <Tabs key={vt} tabs={TABS}>
+      <Tabs key={vt} tabs={tabs}>
         {(active) => (
           <>
             {active === 'leaderboard' && (
@@ -86,6 +89,15 @@ export function TrackerPage({ vt, session, go }) {
                 isCreator={!!data.is_creator}
                 onDelete={removeEntry}
               />
+            )}
+            {active === 'pending' && (
+              writeToken ? (
+                <PendingTab recent={data.recent} kind={g.kind} unit={g.unit} onVote={vote} />
+              ) : (
+                <Card><p className="hint" style={{ margin: 0 }}>
+                  Join this tracker to review pending entries.
+                </p></Card>
+              )
             )}
             {active === 'phone' && (
               <LogFromPhone vt={vt} writeToken={writeToken} session={session} kind={g.kind} />

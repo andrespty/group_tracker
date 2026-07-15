@@ -4,10 +4,18 @@ import { Card } from '../../components/Card.jsx'
 import { Button } from '../../components/Button.jsx'
 import { Field } from '../../components/Field.jsx'
 
-function GroupSection({ group, onSaveGroup }) {
+const APPROVAL_MODES = [
+  { id: 'any_member', label: 'Any member', hint: "Anyone active except the entry's author." },
+  { id: 'chosen_approvers', label: 'Chosen approvers', hint: 'Only people you pick below (plus you, always).' },
+]
+
+function GroupSection({ group, activeMembers, onSaveGroup }) {
   const [f, setF] = useState({
     name: group.name, kind: group.kind, unit: group.unit,
     increment: group.increment, goal: group.goal ?? '',
+    approvalsRequired: group.approvals_required ?? 0,
+    approvalMode: group.approval_mode || 'any_member',
+    approverIds: activeMembers.filter((m) => m.is_approver).map((m) => m.member_id),
   })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -19,6 +27,23 @@ function GroupSection({ group, onSaveGroup }) {
     setF({ ...f, kind, unit: kind === f.kind ? f.unit : (kind === 'count' ? f.unit : m.defaultUnit) })
   }
 
+  const toggleApprover = (memberId) => {
+    if (memberId === group.created_by) return // always an approver, not toggleable
+    setF((prev) => ({
+      ...prev,
+      approverIds: prev.approverIds.includes(memberId)
+        ? prev.approverIds.filter((id) => id !== memberId)
+        : [...prev.approverIds, memberId],
+    }))
+  }
+
+  const approvalsRequired = Number(f.approvalsRequired) || 0
+  const eligibleCount = f.approvalMode === 'chosen_approvers'
+    ? new Set([...f.approverIds, group.created_by]).size
+    : activeMembers.length
+  const maxPossible = Math.max(eligibleCount - 1, 0)
+  const guardExceeded = approvalsRequired > 0 && approvalsRequired > maxPossible
+
   const submit = async () => {
     setErr(''); setBusy(true)
     try {
@@ -28,6 +53,9 @@ function GroupSection({ group, onSaveGroup }) {
         increment: Number(f.increment),
         goal: f.goal === '' ? null : Number(f.goal),
         kind: f.kind,
+        approvalsRequired,
+        approvalMode: f.approvalMode,
+        approverIds: f.approvalMode === 'chosen_approvers' ? f.approverIds : null,
       })
     } catch (e) {
       setErr(e.message)
@@ -37,44 +65,102 @@ function GroupSection({ group, onSaveGroup }) {
   }
 
   return (
-    <Card title="Group">
-      <label>Tracker type</label>
-      <div className="kindgrid">
-        {KINDS.map((k) => (
-          <button type="button" key={k.id}
-                  className={`kindopt ${f.kind === k.id ? 'active' : ''}`}
-                  onClick={() => selectKind(k.id)}>
-            <div className="klabel">{k.label}</div>
-            <div className="khint">{k.hint}</div>
-          </button>
-        ))}
-      </div>
+    <>
+      <Card title="Group">
+        <label>Tracker type</label>
+        <div className="kindgrid">
+          {KINDS.map((k) => (
+            <button type="button" key={k.id}
+                    className={`kindopt ${f.kind === k.id ? 'active' : ''}`}
+                    onClick={() => selectKind(k.id)}>
+              <div className="klabel">{k.label}</div>
+              <div className="khint">{k.hint}</div>
+            </button>
+          ))}
+        </div>
 
-      <Field label="Tracker name" value={f.name} onChange={set('name')} />
-      <div className="grid2">
-        <div>
-          <label>Unit</label>
-          {meta.unitMode === 'select' ? (
-            <select value={f.unit} onChange={set('unit')}>
-              {meta.unitOptions.map((u) => <option key={u} value={u}>{u}</option>)}
-            </select>
-          ) : (
-            <input value={f.unit} onChange={set('unit')} />
-          )}
+        <Field label="Tracker name" value={f.name} onChange={set('name')} />
+        <div className="grid2">
+          <div>
+            <label>Unit</label>
+            {meta.unitMode === 'select' ? (
+              <select value={f.unit} onChange={set('unit')}>
+                {meta.unitOptions.map((u) => <option key={u} value={u}>{u}</option>)}
+              </select>
+            ) : (
+              <input value={f.unit} onChange={set('unit')} />
+            )}
+          </div>
+          <div>
+            <Field label="Per tap" type="number" step={meta.whole ? '1' : 'any'}
+                   value={f.increment} onChange={set('increment')} />
+          </div>
         </div>
-        <div>
-          <Field label="Per tap" type="number" step={meta.whole ? '1' : 'any'}
-                 value={f.increment} onChange={set('increment')} />
-        </div>
-      </div>
-      <Field label="Goal (blank = no goal)" type="number" step={meta.whole ? '1' : 'any'}
-             value={f.goal} onChange={set('goal')} />
-      <div className="spacer" />
-      <Button full disabled={busy || !f.name} onClick={submit}>
-        {busy ? 'Saving…' : 'Save changes'}
-      </Button>
-      {err && <p className="err">{err}</p>}
-    </Card>
+        <Field label="Goal (blank = no goal)" type="number" step={meta.whole ? '1' : 'any'}
+               value={f.goal} onChange={set('goal')} />
+      </Card>
+
+      <Card title="Approvals">
+        <p className="hint" style={{ marginTop: 0 }}>
+          Require other members to sign off before an entry counts toward the total.
+        </p>
+        <Field label="Approvals required (0 = off)" type="number" min="0" step="1"
+               value={f.approvalsRequired} onChange={set('approvalsRequired')} />
+
+        {approvalsRequired > 0 && (
+          <>
+            <label>Who can approve</label>
+            <div className="kindgrid">
+              {APPROVAL_MODES.map((mo) => (
+                <button type="button" key={mo.id}
+                        className={`kindopt ${f.approvalMode === mo.id ? 'active' : ''}`}
+                        onClick={() => setF({ ...f, approvalMode: mo.id })}>
+                  <div className="klabel">{mo.label}</div>
+                  <div className="khint">{mo.hint}</div>
+                </button>
+              ))}
+            </div>
+
+            {f.approvalMode === 'chosen_approvers' && (
+              <>
+                <label>Approvers</label>
+                <div className="board">
+                  {activeMembers.map((m) => {
+                    const isCreator = m.member_id === group.created_by
+                    return (
+                      <label key={m.member_id} className="approverrow">
+                        <input
+                          type="checkbox"
+                          checked={isCreator || f.approverIds.includes(m.member_id)}
+                          disabled={isCreator}
+                          onChange={() => toggleApprover(m.member_id)}
+                        />
+                        <span>{m.name}</span>
+                        {isCreator && <span className="hint" style={{ margin: 0 }}>you, always an approver</span>}
+                      </label>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+
+            {guardExceeded && (
+              <p className="err">
+                {approvalsRequired} is more than this tracker can ever satisfy — with {eligibleCount} eligible
+                approver{eligibleCount === 1 ? '' : 's'}, at most {maxPossible} can vote on any single entry (the
+                author never counts). Lower the requirement or add more approvers.
+              </p>
+            )}
+          </>
+        )}
+
+        <div className="spacer" />
+        <Button full disabled={busy || !f.name || guardExceeded} onClick={submit}>
+          {busy ? 'Saving…' : 'Save changes'}
+        </Button>
+        {err && <p className="err">{err}</p>}
+      </Card>
+    </>
   )
 }
 
@@ -212,7 +298,7 @@ export function SettingsTab({
 
   return (
     <>
-      {isCreator && <GroupSection group={group} onSaveGroup={onSaveGroup} />}
+      {isCreator && <GroupSection group={group} activeMembers={activeMembers} onSaveGroup={onSaveGroup} />}
       <YouSection
         isCreator={isCreator}
         myMemberId={myMemberId}

@@ -33,6 +33,7 @@ export function Tabs({ tabs, defaultTab = tabs[0]?.id, children }) {
             onClick={() => select(t.id)}
           >
             {t.label}
+            {t.badge > 0 && <span className="tab-badge">{t.badge}</span>}
           </button>
         ))}
       </div>

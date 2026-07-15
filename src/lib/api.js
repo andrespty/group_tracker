@@ -42,6 +42,9 @@ export const api = {
       p_increment: p.increment,
       p_goal: p.goal ?? null,
       p_kind: p.kind,
+      p_approvals_required: p.approvalsRequired,
+      p_approval_mode: p.approvalMode,
+      p_approver_ids: p.approverIds ?? null,
     }),
   leaveGroup: (writeToken, successorMemberId = null) =>
     rpc('leave_group', { p_write_token: writeToken, p_successor_member_id: successorMemberId }),
@@ -49,4 +52,6 @@ export const api = {
     rpc('delete_group', { p_write_token: writeToken }),
   deleteEntry: (writeToken, entryId) =>
     rpc('delete_entry', { p_write_token: writeToken, p_entry_id: entryId }),
+  voteEntry: (writeToken, entryId, vote) =>
+    rpc('vote_entry', { p_write_token: writeToken, p_entry_id: entryId, p_vote: vote }),
 }
