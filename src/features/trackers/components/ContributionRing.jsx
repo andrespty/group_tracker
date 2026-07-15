@@ -1,10 +1,10 @@
-import { fmt } from '../../../lib/format.js'
+import { formatAmount } from '../../../lib/format.js'
 import { colorFor } from '../../../lib/colors.js'
 
 const R = 120
 const C = 2 * Math.PI * R
 
-export function ContributionRing({ total, displayTotal, goal, unit, leaderboard, pastTotal = 0 }) {
+export function ContributionRing({ total, displayTotal, goal, kind, unit, leaderboard, pastTotal = 0 }) {
   let offset = 0
   const arcs = leaderboard.map((m) => {
     const len = (Number(m.total) / Number(goal)) * C
@@ -30,8 +30,8 @@ export function ContributionRing({ total, displayTotal, goal, unit, leaderboard,
         ))}
       </svg>
       <div className="center">
-        <div className="count">{fmt(displayTotal)}</div>
-        <div className="of">of {fmt(goal)} {unit}</div>
+        <div className="count">{formatAmount(displayTotal, kind, unit)}</div>
+        <div className="of">of {formatAmount(goal, kind, unit)} {kind !== 'money' ? unit : ''}</div>
         <div className="chip">
           <b>{pct.toFixed(1)}%</b> · {leaderboard.length}{' '}
           {leaderboard.length === 1 ? 'player' : 'friends'}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../lib/api.js'
 import { tokens } from '../../lib/tokens.js'
-import { fmt } from '../../lib/format.js'
+import { formatAmount } from '../../lib/format.js'
 import { Card } from '../../components/Card.jsx'
 
 export function MyTrackers({ go }) {
@@ -26,7 +26,7 @@ export function MyTrackers({ go }) {
             <div className="tsub">as {t.my_name}</div>
           </div>
           <div className="tval">
-            {fmt(t.total)}{t.goal ? ` / ${fmt(t.goal)}` : ''}
+            {formatAmount(t.total, t.kind, t.unit)}{t.goal ? ` / ${formatAmount(t.goal, t.kind, t.unit)}` : ''}
           </div>
         </div>
       ))}

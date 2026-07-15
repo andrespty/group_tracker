@@ -1,8 +1,8 @@
-import { fmt } from '../../../lib/format.js'
+import { formatAmount } from '../../../lib/format.js'
 import { colorFor } from '../../../lib/colors.js'
 import { Avatar } from '../../../components/Avatar.jsx'
 
-export function Leaderboard({ rows, pastTotal = 0 }) {
+export function Leaderboard({ rows, pastTotal = 0, kind, unit }) {
   const max = Math.max(...rows.map((r) => Number(r.total)), 1)
 
   return (
@@ -23,7 +23,7 @@ export function Leaderboard({ rows, pastTotal = 0 }) {
               }} />
             </div>
           </div>
-          <div className="rval">{fmt(m.total)}</div>
+          <div className="rval">{formatAmount(m.total, kind, unit)}</div>
         </div>
       ))}
       {Number(pastTotal) > 0 && (
@@ -33,7 +33,7 @@ export function Leaderboard({ rows, pastTotal = 0 }) {
           <div>
             <div className="rname">Past members</div>
           </div>
-          <div className="rval">{fmt(pastTotal)}</div>
+          <div className="rval">{formatAmount(pastTotal, kind, unit)}</div>
         </div>
       )}
     </div>

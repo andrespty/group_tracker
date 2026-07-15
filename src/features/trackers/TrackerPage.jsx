@@ -1,12 +1,14 @@
+import { useState } from 'react'
 import { useTracker } from './useTracker.js'
 import { ContributionRing } from './components/ContributionRing.jsx'
 import { Leaderboard } from './components/Leaderboard.jsx'
 import { ActivityFeed } from './components/ActivityFeed.jsx'
 import { LogButton } from './components/LogButton.jsx'
+import { LogDialog } from './components/LogDialog.jsx'
 import { JoinBox } from './JoinBox.jsx'
 import { LogFromPhone } from './LogFromPhone.jsx'
 import { SettingsTab } from './SettingsTab.jsx'
-import { fmt } from '../../lib/format.js'
+import { formatAmount } from '../../lib/format.js'
 import { Card } from '../../components/Card.jsx'
 import { Tabs } from '../../components/Tabs.jsx'
 
@@ -18,7 +20,11 @@ const TABS = [
 ]
 
 export function TrackerPage({ vt, session, go }) {
-  const { data, err, writeToken, displayTotal, log, join, rename, updateSettings, leave, remove } = useTracker(vt)
+  const {
+    data, err, writeToken, displayTotal,
+    log, removeEntry, join, rename, updateSettings, leave, remove,
+  } = useTracker(vt)
+  const [dialogOpen, setDialogOpen] = useState(false)
 
   if (err) return <Card><p className="err">Couldn't load: {err}</p></Card>
   if (!data) return <Card><p className="center-txt muted">Loading…</p></Card>
@@ -37,33 +43,52 @@ export function TrackerPage({ vt, session, go }) {
             total={Number(data.total)}
             displayTotal={displayTotal}
             goal={Number(g.goal)}
+            kind={g.kind}
             unit={g.unit}
             leaderboard={data.leaderboard}
             pastTotal={pastTotal}
           />
         ) : (
           <div className="numhero">
-            <div className="bignum">{fmt(displayTotal)}</div>
-            <span className="of">{fmt(data.total)} {g.unit}</span>
+            <div className="bignum">{formatAmount(displayTotal, g.kind, g.unit)}</div>
+            <span className="of">{formatAmount(data.total, g.kind, g.unit)} {g.kind !== 'money' ? g.unit : ''}</span>
           </div>
         )}
       </div>
 
       {writeToken
-        ? <LogButton increment={g.increment} unit={g.unit} onLog={log} />
+        ? <LogButton increment={g.increment} kind={g.kind} unit={g.unit} onOpen={() => setDialogOpen(true)} />
         : <JoinBox onJoin={join} />}
+
+      {dialogOpen && (
+        <LogDialog
+          kind={g.kind}
+          unit={g.unit}
+          increment={g.increment}
+          groupId={g.id}
+          onClose={() => setDialogOpen(false)}
+          onConfirm={(payload, origin) => log(payload, origin)}
+        />
+      )}
 
       <Tabs key={vt} tabs={TABS}>
         {(active) => (
           <>
             {active === 'leaderboard' && (
-              <Leaderboard rows={data.leaderboard} pastTotal={pastTotal} />
+              <Leaderboard rows={data.leaderboard} pastTotal={pastTotal} kind={g.kind} unit={g.unit} />
             )}
             {active === 'activity' && (
-              <ActivityFeed recent={data.recent} unit={g.unit} />
+              <ActivityFeed
+                recent={data.recent}
+                kind={g.kind}
+                unit={g.unit}
+                myMemberId={data.my_member_id}
+                isCreator={!!data.is_creator}
+                onDelete={removeEntry}
+              />
             )}
             {active === 'phone' && (
-              <LogFromPhone vt={vt} writeToken={writeToken} session={session} />
+              <LogFromPhone vt={vt} writeToken={writeToken} session={session} kind={g.kind} />
             )}
             {active === 'settings' && (
               writeToken ? (

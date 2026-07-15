@@ -26,9 +26,16 @@ function CopyRow({ value }) {
   )
 }
 
-export function LogFromPhone({ vt, writeToken, session }) {
+const KIND_INPUT_LABEL = {
+  distance: 'the distance',
+  money: 'the amount',
+  duration: 'the duration',
+}
+
+export function LogFromPhone({ vt, writeToken, session, kind }) {
   const endpoint = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rpc/log_entry`
   const apikey = import.meta.env.VITE_SUPABASE_ANON_KEY
+  const needsAmount = kind !== 'count'
 
   const claim = async () => {
     try {
@@ -56,7 +63,15 @@ export function LogFromPhone({ vt, writeToken, session }) {
             Build this once on your phone, then add it to your Home Screen for one-tap logging.
           </p>
           <ol className="steps">
-            <li>Shortcuts app → <b>+</b> → add action <b>Get Contents of URL</b>.</li>
+            {needsAmount && (
+              <li>
+                Shortcuts app → <b>+</b> → add action <b>Ask for Input</b>, type <b>Number</b> —
+                this is where you'll enter {KIND_INPUT_LABEL[kind]} each time.
+              </li>
+            )}
+            <li>
+              {needsAmount ? 'Then add action' : 'Shortcuts app → + → add action'} <b>Get Contents of URL</b>.
+            </li>
             <li>
               <b>URL</b> — the log entry endpoint:
               <CopyRow value={endpoint} />
@@ -71,11 +86,18 @@ export function LogFromPhone({ vt, writeToken, session }) {
               </div>
             </li>
             <li>
-              <b>Request Body</b>: <code>JSON</code>, one field, <code>p_write_token</code> =
+              <b>Request Body</b>: <code>JSON</code>, field <code>p_write_token</code> =
               <CopyRow value={writeToken} />
-              <span className="hint">
-                Leave <code>p_amount</code> out to use the tracker's default increment.
-              </span>
+              {needsAmount ? (
+                <span className="hint">
+                  Also add field <code>p_amount</code> and set its value to the{' '}
+                  <b>Provided Input</b> variable from the <b>Ask for Input</b> action.
+                </span>
+              ) : (
+                <span className="hint">
+                  Leave <code>p_amount</code> out to use the tracker's default increment.
+                </span>
+              )}
             </li>
             <li>Name it (e.g. "+1 drink") and add it to your Home Screen.</li>
           </ol>

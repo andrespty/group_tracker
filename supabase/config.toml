@@ -124,6 +124,15 @@ file_size_limit = "50MiB"
 # allowed_mime_types = ["image/png", "image/jpeg"]
 # objects_path = "./images"
 
+# Entry photos (thumbnail + full, compressed client-side before upload).
+# Public bucket with unguessable filenames — see the migration for the
+# matching storage.buckets row and RLS policies that make this reproducible
+# on cloud via `supabase db push` too.
+[storage.buckets.entry-photos]
+public = true
+file_size_limit = "5MiB"
+allowed_mime_types = ["image/jpeg", "image/png", "image/webp"]
+
 # Allow connections via S3 compatible clients
 [storage.s3_protocol]
 enabled = true

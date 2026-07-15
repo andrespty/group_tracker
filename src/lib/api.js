@@ -14,11 +14,19 @@ export const api = {
       p_unit: p.unit,
       p_increment: p.increment,
       p_goal: p.goal ?? null,
+      p_kind: p.kind,
     }),
   addMember: (viewToken, name) =>
     rpc('add_member', { p_view_token: viewToken, p_name: name }),
-  logEntry: (writeToken, amount = null) =>
-    rpc('log_entry', { p_write_token: writeToken, p_amount: amount }),
+  logEntry: (writeToken, p = {}) =>
+    rpc('log_entry', {
+      p_write_token: writeToken,
+      p_amount: p.amount ?? null,
+      p_note: p.note || null,
+      p_occurred_at: p.occurredAt || null,
+      p_photo_path: p.photoPath || null,
+      p_thumb_path: p.thumbPath || null,
+    }),
   getStandings: (viewToken, writeToken = null) =>
     rpc('get_standings', { p_view_token: viewToken, p_write_token: writeToken }),
   claimMember: (writeToken) =>
@@ -33,9 +41,12 @@ export const api = {
       p_unit: p.unit,
       p_increment: p.increment,
       p_goal: p.goal ?? null,
+      p_kind: p.kind,
     }),
   leaveGroup: (writeToken, successorMemberId = null) =>
     rpc('leave_group', { p_write_token: writeToken, p_successor_member_id: successorMemberId }),
   deleteGroup: (writeToken) =>
     rpc('delete_group', { p_write_token: writeToken }),
+  deleteEntry: (writeToken, entryId) =>
+    rpc('delete_entry', { p_write_token: writeToken, p_entry_id: entryId }),
 }

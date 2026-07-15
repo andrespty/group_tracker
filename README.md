@@ -39,6 +39,77 @@ setup above. Supabase also issues a **secret key** (sometimes shown as
 in this app's code, env files, or bundle. This app has no legitimate use for
 it.
 
+## Tracker kinds
+
+Every tracker has a `kind` — `count`, `distance`, `money`, or `duration` —
+picked when it's created and editable later from Settings (creator only).
+The kind decides two things:
+
+- **What the unit field looks like.** `count` takes any freeform word
+  ("drinks", "pushups", …); the other three constrain it to a dropdown of
+  sensible units (`mi`/`km` for distance, a currency code for money,
+  `min`/`hr` for duration). See `KINDS` in `src/lib/format.js` for the exact
+  list — that's the single source of truth CreateTracker and Settings build
+  their kind picker from.
+- **How numbers are formatted.** `formatAmount(amount, kind, unit)` (also
+  in `format.js`) is the one place that decides this: money renders as a
+  real currency string (`$1,234.56`), distance/duration as a decimal, count
+  as a plain integer — exactly what `fmt()` already produced, so existing
+  (kind-less, i.e. defaulted to `count`) trackers look unchanged. It's used
+  everywhere a total is shown: the ring, the leaderboard, the activity
+  feed, the "my trackers" dashboard.
+
+## Log dialog
+
+Tapping the log button no longer logs instantly — it opens a dialog
+(`LogDialog.jsx`) with:
+
+- **Amount**, pre-filled with the tracker's configured increment, so a
+  plain count tracker is still just tap → confirm.
+- **Note**, optional freeform text.
+- **When**, defaulting to now but backdatable. This is `entries.occurred_at`
+  — kept deliberately separate from `entries.created_at`, which stays a
+  pure "when was this actually logged" audit trail. Everything that orders
+  or displays activity (the feed, sorting) reads `occurred_at`, so a
+  backdated entry lands where it actually happened, not where it was typed
+  in.
+- **Photo**, optional (see below).
+
+Confirming calls `log_entry` and fires the confetti burst from the dialog's
+Confirm button rather than the (now-hidden-behind-the-dialog) log button.
+
+## Photos
+
+Attaching a photo to an entry uploads it to a Supabase Storage bucket
+called `entry-photos`. Two things matter here:
+
+- **Compression happens in the browser before upload**, using a
+  `<canvas>` (no image library needed): a thumbnail (max 400px on the long
+  edge, JPEG quality ~0.7, aiming for ~20KB) and a full copy (max 1600px,
+  quality ~0.8, aiming for ~200KB). Both get uploaded; the entry stores
+  both paths. If the upload fails, the entry still logs — just without a
+  photo — rather than blocking you.
+- **The feed only ever loads the thumbnail — never the full image.** This
+  is a load-bearing rule, not a style choice: object storage (Supabase
+  included) bills egress per byte served, and a feed of 30 entries pulling
+  full ~200KB photos instead of ~20KB thumbnails is a 10x bandwidth
+  difference on *every single page view*. The full photo only loads when
+  someone taps a thumbnail to open it in the lightbox — one request, on
+  demand, not 30 requests up front.
+
+The database only ever stores the **file path** (e.g.
+`<group_id>/<uuid>.jpg`), never a full URL. `src/lib/photos.js` is the one
+place that turns a path into a URL (`photoUrl()`) — deliberately, so that
+if this bucket ever needs to switch from public to private/signed URLs,
+that's a one-function change, not a find-and-replace across the app.
+
+The bucket itself is **public**, with filenames that are random UUIDs —
+the same security posture as this app's `view_token`/`write_token` share
+links. Nothing technically stops someone from guessing a path and
+requesting it directly, but nobody's going to brute-force a UUID. If that
+trust level ever stops being good enough, revisit `photoUrl()` and the
+bucket's `public` flag in the migration + `config.toml` together.
+
 ## The two databases (the concept that trips people up)
 
 There are two separate, independent Supabase Postgres databases involved in
@@ -286,22 +357,37 @@ sign-in will silently fail to redirect after someone clicks the email link.
 ## iOS Shortcut (one-tap logging)
 
 Every tracker has a **Log from phone** tab with your personal `write_token`
-already filled in — this walks through the same steps:
+already filled in, and steps that adapt to the tracker's kind:
 
-1. Shortcuts app → **+** → add action **Get Contents of URL**.
-2. **URL**: the log entry endpoint, `<SUPABASE_URL>/rest/v1/rpc/log_entry`.
-3. **Method**: `POST`.
-4. **Headers** (add two):
+- **count** trackers: no prompt — the Shortcut just POSTs, and the entry
+  uses the tracker's default increment.
+- **distance / money / duration** trackers: the guide adds an **Ask for
+  Input (Number)** action up front, and has you pass that result as
+  `p_amount` in the request body.
+
+The general shape (see the Log from phone tab for the exact, current
+steps with copy buttons for every value):
+
+1. (typed trackers only) Shortcuts app → **+** → add action **Ask for
+   Input**, type **Number**.
+2. Add action **Get Contents of URL**.
+3. **URL**: the log entry endpoint, `<SUPABASE_URL>/rest/v1/rpc/log_entry`.
+4. **Method**: `POST`.
+5. **Headers** (add two):
    - `apikey` = your Supabase anon / publishable key
    - `Content-Type` = `application/json`
-5. **Request Body**: `JSON`, with one field, `p_write_token` = your
-   `write_token`. Leave `p_amount` out to use the tracker's default
-   increment.
-6. Name it (e.g. "+1 drink") and add it to your Home Screen.
+6. **Request Body**: `JSON`, with field `p_write_token` = your
+   `write_token`. For typed trackers, also add `p_amount` set to the
+   **Provided Input** variable from the Ask for Input action; for count
+   trackers, leave `p_amount` out to use the tracker's default increment.
+7. Name it (e.g. "+1 drink") and add it to your Home Screen.
 
 Each person builds their own Shortcut with their own `write_token` — that
 token is what identifies them as that specific member when the request
-comes in.
+comes in. `log_entry` also accepts optional `p_note`, `p_occurred_at`,
+`p_photo_path`, and `p_thumb_path` fields (all default to
+null/now/no-photo), but the Shortcut doesn't set these — they're there for
+the in-app log dialog.
 
 ## Project structure
 
@@ -315,11 +401,12 @@ src/
     supabase.js                the Supabase client
     api.js                     one function per Postgres RPC call
     tokens.js                  localStorage-backed store of your write_tokens, keyed by view_token
-    format.js                  number/date formatting, name initials, URL helpers
+    format.js                  KINDS metadata, formatAmount(), number/date formatting, URL helpers
     colors.js                  per-member color assignment
     confetti.js                the little celebration burst on logging
+    photos.js                  compress/upload/delete entry photos; photoUrl() — the only path→URL helper
 
-  components/                 generic, reusable UI — Card, Button, Field, Avatar, Tabs
+  components/                 generic, reusable UI — Card, Button, Field, Avatar, Tabs, Lightbox
 
   theme/                      tokens.css (colors/spacing as CSS variables) + base.css (reset) + useTheme.js
 
@@ -330,9 +417,9 @@ src/
     auth/                      magic-link sign-in (useSession.js, AuthBox.jsx)
     trackers/                  everything about a single tracker
       useTracker.js             fetching, the count-up animation, and all the mutation calls
-      TrackerPage.jsx            composes the pinned ring/log-button + the tab bar
+      TrackerPage.jsx            composes the pinned ring/log-button/dialog + the tab bar
       CreateTracker.jsx, JoinBox.jsx, MyTrackers.jsx, LogFromPhone.jsx, SettingsTab.jsx
-      components/                ContributionRing, Leaderboard, ActivityFeed, LogButton
+      components/                ContributionRing, Leaderboard, ActivityFeed, LogButton, LogDialog
 
 supabase/
   config.toml                 local stack configuration (ports, auth settings, etc.)

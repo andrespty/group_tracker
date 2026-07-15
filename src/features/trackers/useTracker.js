@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '../../lib/api.js'
 import { tokens } from '../../lib/tokens.js'
 import { confettiBurst } from '../../lib/confetti.js'
+import { deleteEntryPhotos } from '../../lib/photos.js'
 
 export function useTracker(vt) {
   const [data, setData] = useState(null)
@@ -11,8 +12,14 @@ export function useTracker(vt) {
   const raf = useRef(0)
   const displayRef = useRef(0)
 
-  const animateTo = useCallback((to) => {
+  // `whole` rounds each animation frame to an integer, matching the
+  // original count-tracker behavior exactly. Non-count kinds round to 2
+  // decimals instead — Math.round alone would floor a distance/money/
+  // duration total to a whole number for the entire animation, including
+  // its final frame.
+  const animateTo = useCallback((to, whole) => {
     cancelAnimationFrame(raf.current)
+    const round = whole ? Math.round : (v) => Math.round(v * 100) / 100
     if (document.documentElement.dataset.motion === 'off') {
       displayRef.current = to
       setDisplayTotal(to)
@@ -22,7 +29,7 @@ export function useTracker(vt) {
     const start = performance.now()
     const tick = (now) => {
       const p = Math.min(1, (now - start) / 650)
-      const v = Math.round(from + (to - from) * (1 - Math.pow(1 - p, 3)))
+      const v = round(from + (to - from) * (1 - Math.pow(1 - p, 3)))
       displayRef.current = v
       setDisplayTotal(v)
       if (p < 1) raf.current = requestAnimationFrame(tick)
@@ -38,7 +45,7 @@ export function useTracker(vt) {
       const d = await api.getStandings(vt, writeToken)
       setData(d)
       if (animate) {
-        animateTo(Number(d.total))
+        animateTo(Number(d.total), d.group.kind === 'count')
       } else {
         displayRef.current = Number(d.total)
         setDisplayTotal(Number(d.total))
@@ -53,15 +60,23 @@ export function useTracker(vt) {
     return () => cancelAnimationFrame(raf.current)
   }, [load])
 
-  const log = useCallback(async (origin) => {
+  // Unlike the other mutations here, log() throws instead of setting err —
+  // it's driven by LogDialog, which shows its own inline error and stays
+  // open, rather than the page-level err view (which replaces the whole
+  // tracker with an error card, appropriate for a failed initial load but
+  // not for "that particular tap didn't go through").
+  const log = useCallback(async (payload, origin) => {
     if (!writeToken) return
+    await api.logEntry(writeToken, payload)
     if (origin) confettiBurst(origin.x, origin.y)
-    try {
-      await api.logEntry(writeToken)
-      await load(true)
-    } catch (e) {
-      setErr(e.message)
-    }
+    await load(true)
+  }, [writeToken, load])
+
+  const removeEntry = useCallback(async (entryId) => {
+    if (!writeToken) return
+    const r = await api.deleteEntry(writeToken, entryId)
+    await load(true)
+    await deleteEntryPhotos([r.photo_path, r.thumb_path])
   }, [writeToken, load])
 
   const join = useCallback(async (name) => {
@@ -97,7 +112,7 @@ export function useTracker(vt) {
 
   return {
     data, err, writeToken, displayTotal,
-    log, join, rename, updateSettings, leave, remove,
+    log, removeEntry, join, rename, updateSettings, leave, remove,
     reload: load,
   }
 }
