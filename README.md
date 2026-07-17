@@ -110,6 +110,52 @@ requesting it directly, but nobody's going to brute-force a UUID. If that
 trust level ever stops being good enough, revisit `photoUrl()` and the
 bucket's `public` flag in the migration + `config.toml` together.
 
+## Entry approvals
+
+A tracker can require other members to sign off on an entry before it
+counts toward the total, ring, or leaderboard — useful for shared pots
+where you don't want to just trust everyone's self-reported number.
+
+- **Turning it on**: Settings → Approvals (creator only) → set "Approvals
+  required" above 0. At 0 (the default), every entry counts instantly,
+  exactly like before this feature existed — nothing changes for a
+  tracker that never touches this setting.
+- **Two modes**: **Any member** — anyone active except the entry's own
+  author can vote. **Chosen approvers** — only people the creator has
+  explicitly checked in the Settings checklist (plus the creator
+  themselves, always, whether checked or not).
+- **Symmetric thresholds**: an entry needs N distinct `approve` votes to
+  become `approved`, or N distinct `reject` votes to become `rejected` —
+  whichever side gets there first, where N is `approvals_required`.
+  Status is recomputed after every single vote.
+- **You can't vote on your own entry**, ever, in either mode — the
+  eligible-voter pool always excludes the author.
+- **One vote each**: `entry_votes` has a unique constraint on
+  `(entry_id, member_id)`. There's no "change your vote" in this version —
+  a second vote from the same member on the same entry is rejected with a
+  friendly error, not silently ignored or overwritten.
+- **Grandfathering**: raising the requirement only affects entries logged
+  *after* the change. Existing approved entries stay approved — status is
+  only ever *set* at insert time or by a vote, never rewritten in bulk
+  when the setting changes.
+- **The eligibility guard**: `approvals_required` can't exceed what the
+  tracker could ever actually satisfy — one less than the number of
+  eligible approvers, since the author of any given entry never counts
+  toward its own threshold (so the *worst case* — the entry's author
+  being one of the few eligible approvers — is what has to still work).
+  `update_group` enforces this server-side; Settings shows the same
+  warning inline so you see the problem before you hit save, not after.
+- **Where votes come from**: the **Pending** tab is the review queue —
+  every pending entry the current member is eligible to act on, with a
+  badge on the tab showing how many. Approve and Reject both open a
+  confirm dialog (the same `ConfirmDialog` the rest of the app uses, not
+  a separate one) before the vote is actually sent.
+- **Elsewhere in the app**: pending entries show a "Pending" chip in
+  Activity; rejected ones are greyed out, struck through, and tagged
+  "Rejected" — but stay visible, they're just excluded from every sum.
+  An entry's own author sees its status in Activity but never gets vote
+  buttons on their own entry.
+
 ## The two databases (the concept that trips people up)
 
 There are two separate, independent Supabase Postgres databases involved in
@@ -389,6 +435,10 @@ comes in. `log_entry` also accepts optional `p_note`, `p_occurred_at`,
 null/now/no-photo), but the Shortcut doesn't set these — they're there for
 the in-app log dialog.
 
+If the tracker has approvals turned on, Shortcut-logged entries land
+`pending` exactly like anyone else's — the Shortcut has no way to vote for
+itself, so someone still has to go review it in the Pending tab.
+
 ## Project structure
 
 ```
@@ -406,7 +456,9 @@ src/
     confetti.js                the little celebration burst on logging
     photos.js                  compress/upload/delete entry photos; photoUrl() — the only path→URL helper
 
-  components/                 generic, reusable UI — Card, Button, Field, Avatar, Tabs, Lightbox
+  components/                 generic, reusable UI — Card, Button, Field, Avatar, Tabs, Lightbox,
+                                ConfirmDialog + the useModalA11y hook they (and LogDialog) share
+                                for focus-trapping/Escape/scroll-lock
 
   theme/                      tokens.css (colors/spacing as CSS variables) + base.css (reset) + useTheme.js
 
@@ -419,6 +471,7 @@ src/
       useTracker.js             fetching, the count-up animation, and all the mutation calls
       TrackerPage.jsx            composes the pinned ring/log-button/dialog + the tab bar
       CreateTracker.jsx, JoinBox.jsx, MyTrackers.jsx, LogFromPhone.jsx, SettingsTab.jsx
+      PendingTab.jsx             the approval review queue
       components/                ContributionRing, Leaderboard, ActivityFeed, LogButton, LogDialog
 
 supabase/

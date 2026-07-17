@@ -79,6 +79,15 @@ export function useTracker(vt) {
     await deleteEntryPhotos([r.photo_path, r.thumb_path])
   }, [writeToken, load])
 
+  // Throws (rather than setting err) for the same reason log() does — the
+  // Pending tab shows its own inline error on a failed vote rather than
+  // losing the whole review queue to the page-level error view.
+  const vote = useCallback(async (entryId, choice) => {
+    if (!writeToken) return
+    await api.voteEntry(writeToken, entryId, choice)
+    await load(false)
+  }, [writeToken, load])
+
   const join = useCallback(async (name) => {
     const r = await api.addMember(vt, name)
     tokens.set(vt, r.write_token)
@@ -112,7 +121,7 @@ export function useTracker(vt) {
 
   return {
     data, err, writeToken, displayTotal,
-    log, removeEntry, join, rename, updateSettings, leave, remove,
+    log, removeEntry, vote, join, rename, updateSettings, leave, remove,
     reload: load,
   }
 }

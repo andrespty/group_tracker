@@ -144,6 +144,9 @@ input:focus,select:focus{outline:none; border-color:var(--accent)}
   line-height:1.2; color:var(--muted); padding:9px 4px; border-radius:var(--r-pill);
   transition:.15s}
 .tab.active{background:var(--card); color:var(--ink); box-shadow:var(--shadow-sm)}
+.tab-badge{display:inline-block; margin-left:4px; background:var(--accent); color:#fff;
+  font-family:var(--mono); font-size:9px; font-weight:700; border-radius:99px;
+  padding:1px 5px; vertical-align:middle}
 
 /* past members (leaderboard + ring) */
 .row.past{opacity:.65}
@@ -205,3 +208,26 @@ input:focus,select:focus{outline:none; border-color:var(--accent)}
   display:flex; align-items:center; justify-content:center; padding:24px}
 .lightbox img{max-width:100%; max-height:100%; border-radius:12px; box-shadow:var(--shadow)}
 .lightbox-close{position:fixed; top:18px; right:18px}
+
+/* approver checklist (settings) */
+.approverrow{display:flex; align-items:center; gap:10px; padding:11px 10px; cursor:pointer; font-size:14.5px}
+.approverrow+.approverrow{border-top:1px solid var(--line)}
+.approverrow input[type="checkbox"]{width:auto; flex:0 0 auto}
+
+/* pending review queue */
+.pendingcard-head{display:flex; align-items:center; gap:11px}
+.pendingcard-head .who{flex:1}
+.pendingcard-head .rname{font-weight:600; font-size:15px}
+.pendingcard-head .time{font-family:var(--mono); font-size:10.5px; color:var(--muted);
+  display:block; margin-top:1px}
+.pendingcard-head .amt{font-family:var(--mono); font-size:13px; font-weight:500; color:var(--accent)}
+.votetally{font-size:12px; color:var(--muted); font-family:var(--mono); margin:10px 0 0}
+
+/* status chips (activity feed) */
+.status-chip{display:inline-block; font-family:var(--mono); font-size:9px; font-weight:700;
+  letter-spacing:.03em; text-transform:uppercase; border-radius:99px; padding:2px 7px;
+  margin-left:7px; vertical-align:middle}
+.status-chip.pending{background:var(--track); color:var(--muted)}
+.status-chip.rejected{background:#D6452B; color:#fff}
+.fitem.rejected{opacity:.55}
+.fitem.rejected .txt{text-decoration:line-through; text-decoration-color:var(--muted)}

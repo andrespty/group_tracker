@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { kindMeta } from '../../../lib/format.js'
 import { uploadEntryPhoto } from '../../../lib/photos.js'
 import { Button } from '../../../components/Button.jsx'
+import { useModalA11y } from '../../../components/useModalA11y.js'
 
 function nowLocal() {
   const d = new Date()
@@ -25,31 +26,7 @@ export function LogDialog({ kind, unit, increment, groupId, onConfirm, onClose }
 
   const dialogRef = useRef(null)
   const firstFieldRef = useRef(null)
-
-  useEffect(() => {
-    document.body.style.overflow = 'hidden'
-    firstFieldRef.current?.focus()
-
-    const onKeyDown = (e) => {
-      if (e.key === 'Escape') { onClose(); return }
-      if (e.key !== 'Tab') return
-      const focusables = dialogRef.current?.querySelectorAll('input, select, button:not([disabled])')
-      if (!focusables?.length) return
-      const list = Array.from(focusables)
-      const first = list[0]
-      const last = list[list.length - 1]
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault(); last.focus()
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault(); first.focus()
-      }
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.body.style.overflow = ''
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [onClose])
+  useModalA11y(dialogRef, onClose, firstFieldRef)
 
   const pickPhoto = async (e) => {
     const file = e.target.files?.[0]
