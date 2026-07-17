@@ -88,6 +88,15 @@ export function useTracker(vt) {
     await load(false)
   }, [writeToken, load])
 
+  // Throws — used both by a direct Settings button click (which shows its
+  // own inline error) and by the auto-claim-after-sign-in effect (which
+  // shows its own transient result notice instead).
+  const claim = useCallback(async () => {
+    if (!writeToken) return
+    await api.claimMember(writeToken)
+    await load(false)
+  }, [writeToken, load])
+
   const join = useCallback(async (name) => {
     const r = await api.addMember(vt, name)
     tokens.set(vt, r.write_token)
@@ -121,7 +130,7 @@ export function useTracker(vt) {
 
   return {
     data, err, writeToken, displayTotal,
-    log, removeEntry, vote, join, rename, updateSettings, leave, remove,
+    log, removeEntry, vote, claim, join, rename, updateSettings, leave, remove,
     reload: load,
   }
 }

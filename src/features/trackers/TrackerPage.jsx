@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTracker } from './useTracker.js'
 import { ContributionRing } from './components/ContributionRing.jsx'
 import { Leaderboard } from './components/Leaderboard.jsx'
@@ -9,6 +9,8 @@ import { JoinBox } from './JoinBox.jsx'
 import { LogFromPhone } from './LogFromPhone.jsx'
 import { SettingsTab } from './SettingsTab.jsx'
 import { PendingTab } from './PendingTab.jsx'
+import { ClaimBanner } from './ClaimBanner.jsx'
+import { claimBanner, claimIntent } from '../../lib/claim.js'
 import { formatAmount } from '../../lib/format.js'
 import { Card } from '../../components/Card.jsx'
 import { Tabs } from '../../components/Tabs.jsx'
@@ -16,9 +18,26 @@ import { Tabs } from '../../components/Tabs.jsx'
 export function TrackerPage({ vt, session, go }) {
   const {
     data, err, writeToken, displayTotal,
-    log, removeEntry, vote, join, rename, updateSettings, leave, remove,
+    log, removeEntry, vote, claim, join, rename, updateSettings, leave, remove,
   } = useTracker(vt)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [bannerDismissed, setBannerDismissed] = useState(() => claimBanner.isDismissed(vt))
+  const [claimResult, setClaimResult] = useState(null) // { ok, message } | null
+  const autoClaimTried = useRef(false)
+
+  // After a sign-in triggered from this tracker (banner or Settings), the
+  // redirect lands back on this exact URL — claimIntent.consume(vt) tells
+  // us whether that sign-in was "for" this tracker specifically, so we
+  // don't silently auto-claim on every tracker a signed-in guest happens
+  // to revisit later.
+  useEffect(() => {
+    if (autoClaimTried.current || !session || !writeToken) return
+    if (!claimIntent.consume(vt)) return
+    autoClaimTried.current = true
+    claim()
+      .then(() => setClaimResult({ ok: true, message: 'Linked to your account ✓' }))
+      .catch((e) => setClaimResult({ ok: false, message: e.message }))
+  }, [session, writeToken, vt, claim])
 
   if (err) return <Card><p className="err">Couldn't load: {err}</p></Card>
   if (!data) return <Card><p className="center-txt muted">Loading…</p></Card>
@@ -27,6 +46,7 @@ export function TrackerPage({ vt, session, go }) {
   const hasGoal = g.goal != null && Number(g.goal) > 0
   const pastTotal = Number(data.past_total || 0)
   const pendingCount = Number(data.pending_count || 0)
+  const myName = data.leaderboard.find((m) => m.member_id === data.my_member_id)?.name
 
   const tabs = [
     { id: 'leaderboard', label: 'Leaderboard' },
@@ -39,6 +59,21 @@ export function TrackerPage({ vt, session, go }) {
   return (
     <>
       <div className="grouppill"><span className="dot" /> {g.name}</div>
+
+      {claimResult && (
+        <div className="card claimresult">
+          <p className={claimResult.ok ? 'hint' : 'err'} style={{ margin: 0 }}>{claimResult.message}</p>
+          <button type="button" className="iconbtn" onClick={() => setClaimResult(null)} aria-label="Dismiss">✕</button>
+        </div>
+      )}
+
+      {!session && writeToken && !bannerDismissed && (
+        <ClaimBanner
+          vt={vt}
+          memberName={myName}
+          onDismiss={() => { claimBanner.dismiss(vt); setBannerDismissed(true) }}
+        />
+      )}
 
       <div className="hero">
         {hasGoal ? (
@@ -105,14 +140,18 @@ export function TrackerPage({ vt, session, go }) {
             {active === 'settings' && (
               writeToken ? (
                 <SettingsTab
+                  vt={vt}
+                  session={session}
                   group={g}
                   isCreator={!!data.is_creator}
                   myMemberId={data.my_member_id}
+                  myClaimStatus={data.my_claim_status}
                   activeMembers={data.leaderboard}
                   onSaveGroup={updateSettings}
                   onRename={rename}
                   onLeave={leave}
                   onDelete={async () => { await remove(); go(null) }}
+                  onClaim={claim}
                 />
               ) : (
                 <Card><p className="hint" style={{ margin: 0 }}>

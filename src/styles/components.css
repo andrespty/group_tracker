@@ -231,3 +231,12 @@ input:focus,select:focus{outline:none; border-color:var(--accent)}
 .status-chip.rejected{background:#D6452B; color:#fff}
 .fitem.rejected{opacity:.55}
 .fitem.rejected .txt{text-decoration:line-through; text-decoration-color:var(--muted)}
+
+/* claim banner + auto-claim result notice */
+.claimbanner{display:flex; align-items:center; gap:10px; background:var(--card);
+  border:1px solid var(--line); border-radius:var(--r-card); padding:12px 14px;
+  margin-bottom:14px; box-shadow:var(--shadow-sm)}
+.claimbanner-text{flex:1; text-align:left; background:none; border:none; cursor:pointer;
+  color:var(--ink); font-family:var(--body); font-size:13.5px; line-height:1.4; padding:0}
+.claimresult{display:flex; align-items:flex-start; gap:10px}
+.claimresult p{flex:1}

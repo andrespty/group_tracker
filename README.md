@@ -26,10 +26,13 @@ hand before doing anything. This is the entire security model — read it as
 "the database is the API," not "the database is a data store behind an API."
 
 **Guests vs. accounts.** Anyone with a link can join and log entries as a
-guest — no signup. Optionally signing in with a magic link doesn't unlock any
-new *capability*; it just groups your trackers together on one dashboard and
-lets you "claim" a guest membership so your history follows your account
-across devices.
+guest — no signup. Optionally signing in (Google or a magic link) doesn't
+unlock any new *capability*; it just groups your trackers together on one
+dashboard and lets you "claim" a guest membership — from that tracker's
+Settings tab — so your history follows your account across devices. One
+rule keeps this meaningful: **an account can only actively claim one member
+per tracker**, enforced in the database, not just the UI — see "Account
+claiming" below.
 
 **The key that ships in the browser is meant to ship in the browser.** The
 frontend uses Supabase's anon / publishable key (`VITE_SUPABASE_ANON_KEY`),
@@ -155,6 +158,75 @@ where you don't want to just trust everyone's self-reported number.
   "Rejected" — but stay visible, they're just excluded from every sum.
   An entry's own author sees its status in Activity but never gets vote
   buttons on their own entry.
+
+## Account claiming
+
+Sign-in (Google or magic link) is optional, but *claiming* a member —
+linking it to your account — is what makes a tracker follow you across
+devices and keeps a guest's history intact even if they lose their
+`write_token`.
+
+- **From inside a tracker**: Settings → **Your account**. What's shown
+  adapts to your state — a sign-in prompt if you're a guest, a
+  "Claim `<name>` on this tracker" button if you're signed in but this
+  member isn't linked yet, "Claimed by your account ✓" if you've already
+  claimed it, or a read-only note if it's linked to a *different* account.
+- **The gentle nudge**: guests who've already joined see a small,
+  dismissible banner ("Joined as `<name>`? Sign in to save your spot.")
+  near the top of the tracker page (not in any dialog). Tapping it expands
+  the same sign-in flow in place — no separate form. Dismissing it is
+  remembered per-tracker in localStorage (`claimBanner` in
+  `src/lib/claim.js`), so it doesn't nag on every visit.
+- **One active member per account per group.** An account can never
+  actively claim two members in the same tracker. The real backstop is a
+  partial unique index —
+  `members_unique_account_per_group on members (group_id, account_id)
+  where account_id is not null and left_at is null` — with `claim_member`
+  checking first so the failure is a named, friendly error ("Your account
+  is already on this tracker as Alex") instead of a raw constraint
+  violation. This matters because a signed-in account controlling two
+  members in one group could vote on its own pending entries under a
+  second identity, or double up on the leaderboard — the whole point of
+  claiming is "this account is one voice in this group," and this rule is
+  what keeps that true even if someone tries to route around it. Leaving a
+  member frees the account to claim a fresh one later — the index is
+  partial (`where left_at is null`) for exactly that reason. There's no
+  merging in this version: claiming a member in a *different* group you're
+  not already in works fine; claiming a second one in a group you're
+  already active in doesn't.
+- **After sign-in**: if you triggered sign-in from a tracker (the banner or
+  Settings), landing back there — both Google and magic link redirect to
+  the exact URL you started from — automatically attempts to claim that
+  member and shows the result right on the page ("Linked to your account
+  ✓", or the same friendly rejection). This only fires for the tracker you
+  actually signed in *from*: `claimIntent` in `src/lib/claim.js` is a
+  one-shot localStorage flag set right before the redirect and consumed
+  (cleared) the moment it's used, so signing in from Tracker A doesn't
+  silently auto-claim Tracker B if you happen to revisit it later while
+  already signed in.
+
+### Google sign-in setup
+
+Local and cloud are configured completely independently — neither knows
+about the other's OAuth client.
+
+- **Local**: set two env vars before running `supabase start` / `db reset`:
+  `SUPABASE_AUTH_GOOGLE_CLIENT_ID` and `SUPABASE_AUTH_GOOGLE_CLIENT_SECRET`
+  (read via `env(...)` in `[auth.external.google]` in `config.toml` — the
+  secret is never hardcoded there). Get both from a Google Cloud OAuth
+  client (Google Cloud Console → APIs & Services → Credentials → Create
+  Credentials → OAuth client ID, type "Web application"), with
+  `http://127.0.0.1:54321/auth/v1/callback` as an authorized redirect URI.
+  Without these two vars set, the local stack still starts fine — Google
+  just isn't a working sign-in option until you set them.
+- **Cloud**: configured entirely from the Supabase dashboard
+  (Authentication → Providers → Google) with its *own* Google Cloud OAuth
+  client and its own redirect URI (`https://<ref>.supabase.co/auth/v1/callback`).
+  This is provider credentials, not schema — `supabase db push` never
+  touches it.
+- Either way, the URL you're signing in *from* also needs to be on the
+  redirect allow-list, or the redirect (and the auto-claim that depends on
+  it) lands in the wrong place — see the Gotchas entry below.
 
 ## The two databases (the concept that trips people up)
 
@@ -377,6 +449,19 @@ Don't lean on `db pull` to generate migrations for you — it diffs and can
 easily miss things or report nothing changed when something did. Write
 migration SQL by hand, as in workflow 2 above.
 
+**Magic-link / Google sign-in redirects to the wrong place (or port 3000)**
+Sign-in redirects (`emailRedirectTo` / OAuth's `redirectTo`) are validated
+against `auth.site_url` + `auth.additional_redirect_urls` in `config.toml`
+— Supabase matches by *origin* and ignores the query string (so one entry
+covers every `?g=<view_token>` tracker URL, not just the bare homepage),
+but the origin itself has to be on the list, or the redirect silently
+falls back to `site_url` instead of the page you actually signed in from.
+That breaks the auto-claim-after-sign-in flow specifically, since it lands
+somewhere with no `?g=` at all. Local dev is set to `http://localhost:5173`
+(Vite's default port) — if you run `npm run dev` on a different port (or
+with `--host`), add that exact origin to `additional_redirect_urls` too,
+then `supabase stop && supabase start` to pick up the config change.
+
 **Local Studio shows no tables / looks empty**
 Studio is at **http://127.0.0.1:54323** when the local stack is running.
 If your tables aren't there, double-check the schema dropdown in the table
@@ -396,9 +481,12 @@ run. Host it for free on Cloudflare Pages or Vercel; set
 environment variables in the host's dashboard.
 
 Then, in the Supabase dashboard, go to **Authentication → URL
-Configuration → Redirect URLs** and add your deployed URL. Magic-link
-sign-in emails link back to whatever's on that allow-list — skip this and
-sign-in will silently fail to redirect after someone clicks the email link.
+Configuration → Redirect URLs** and add your deployed URL — and, if you
+want Google sign-in live there too, configure it under **Authentication →
+Providers → Google** with its own Google Cloud OAuth client (see "Google
+sign-in setup" above). Both magic-link and Google sign-in link back to
+whatever's on that allow-list — skip this and sign-in will silently fail
+to redirect (or auto-claim) after someone completes it.
 
 ## iOS Shortcut (one-tap logging)
 
@@ -455,6 +543,8 @@ src/
     colors.js                  per-member color assignment
     confetti.js                the little celebration burst on logging
     photos.js                  compress/upload/delete entry photos; photoUrl() — the only path→URL helper
+    claim.js                   localStorage: claimBanner (dismissed?) + claimIntent (one-shot, set
+                                 before a sign-in redirect, consumed by the auto-claim effect)
 
   components/                 generic, reusable UI — Card, Button, Field, Avatar, Tabs, Lightbox,
                                 ConfirmDialog + the useModalA11y hook they (and LogDialog) share
@@ -466,12 +556,14 @@ src/
     components.css             all the component-specific CSS (.card, .btn, .board, .tabbar, …)
 
   features/
-    auth/                      magic-link sign-in (useSession.js, AuthBox.jsx)
+    auth/                      useSession.js, AuthBox.jsx (Google + magic link; reused on the home
+                                 page and, with a `vt`, from inside a tracker's Settings/banner)
     trackers/                  everything about a single tracker
       useTracker.js             fetching, the count-up animation, and all the mutation calls
-      TrackerPage.jsx            composes the pinned ring/log-button/dialog + the tab bar
+      TrackerPage.jsx            composes the pinned ring/log-button/dialog/claim-banner + the tab bar
       CreateTracker.jsx, JoinBox.jsx, MyTrackers.jsx, LogFromPhone.jsx, SettingsTab.jsx
       PendingTab.jsx             the approval review queue
+      ClaimBanner.jsx            the dismissible "sign in to save your spot" nudge
       components/                ContributionRing, Leaderboard, ActivityFeed, LogButton, LogDialog
 
 supabase/
