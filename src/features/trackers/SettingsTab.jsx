@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { KINDS, kindMeta } from '../../lib/format.js'
+import { AuthBox } from '../auth/AuthBox.jsx'
 import { Card } from '../../components/Card.jsx'
 import { Button } from '../../components/Button.jsx'
 import { Field } from '../../components/Field.jsx'
@@ -258,6 +259,63 @@ function YouSection({ isCreator, myMemberId, activeMembers, currentName, onRenam
   )
 }
 
+function AccountSection({ vt, session, myClaimStatus, currentName, onClaim }) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  const submit = async () => {
+    setErr(''); setBusy(true)
+    try {
+      await onClaim()
+    } catch (e) {
+      setErr(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!session) {
+    return (
+      <AuthBox
+        vt={vt}
+        title="Your account"
+        copy="Save your spot — sign in to claim this member so you can find this tracker from any device."
+      />
+    )
+  }
+
+  if (myClaimStatus === 'me') {
+    return (
+      <Card title="Your account">
+        <p className="hint" style={{ marginTop: 0 }}>Claimed by your account ✓</p>
+      </Card>
+    )
+  }
+
+  if (myClaimStatus === 'other') {
+    return (
+      <Card title="Your account">
+        <p className="hint" style={{ marginTop: 0 }}>
+          This member is linked to a different account than the one you're signed in with.
+        </p>
+      </Card>
+    )
+  }
+
+  return (
+    <Card title="Your account">
+      <p className="hint" style={{ marginTop: 0 }}>
+        You're signed in, but this member isn't linked to your account yet.
+      </p>
+      <div className="spacer" />
+      <Button full disabled={busy} onClick={submit}>
+        {busy ? 'Claiming…' : `Claim ${currentName || 'this member'} on this tracker`}
+      </Button>
+      {err && <p className="err">{err}</p>}
+    </Card>
+  )
+}
+
 function DangerZone({ groupName, onDelete }) {
   const [confirmText, setConfirmText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -291,8 +349,8 @@ function DangerZone({ groupName, onDelete }) {
 }
 
 export function SettingsTab({
-  group, isCreator, myMemberId, activeMembers,
-  onSaveGroup, onRename, onLeave, onDelete,
+  vt, session, group, isCreator, myMemberId, myClaimStatus, activeMembers,
+  onSaveGroup, onRename, onLeave, onDelete, onClaim,
 }) {
   const currentName = activeMembers.find((m) => m.member_id === myMemberId)?.name || ''
 
@@ -306,6 +364,13 @@ export function SettingsTab({
         currentName={currentName}
         onRename={onRename}
         onLeave={onLeave}
+      />
+      <AccountSection
+        vt={vt}
+        session={session}
+        myClaimStatus={myClaimStatus}
+        currentName={currentName}
+        onClaim={onClaim}
       />
       {isCreator && (
         <DangerZone groupName={group.name} onDelete={onDelete} />
