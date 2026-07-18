@@ -98,6 +98,7 @@ begin
       case
         when v_caller_id is null then null
         when v_caller_account_id is null then 'unclaimed'
+        when auth.uid() is null then null
         when v_caller_account_id = auth.uid() then 'me'
         else 'other'
       end

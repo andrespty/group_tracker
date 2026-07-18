@@ -19,28 +19,32 @@ export function AuthBox({
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const withIntent = () => { if (vt) claimIntent.set(vt) }
-
   const google = async () => {
     setErr(''); setBusy(true)
-    withIntent()
+    if (vt) claimIntent.set(vt)
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: location.href },
     })
-    if (error) { setErr(error.message); setBusy(false) }
+    if (error) {
+      claimIntent.clear()
+      setErr(error.message)
+      setBusy(false)
+    }
     // on success the browser navigates away to Google, so nothing else to do here
   }
 
   const send = async () => {
     setErr('')
-    withIntent()
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: { emailRedirectTo: location.href },
     })
     if (error) setErr(error.message)
-    else setSent(true)
+    else {
+      if (vt) claimIntent.set(vt)
+      setSent(true)
+    }
   }
 
   return (
